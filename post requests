@@ -1,0 +1,15 @@
+this is token based
+urls:
+for get: http://127.0.0.1:8000/api/products/(for all records if specific add add at last)
+post: http://127.0.0.1:8000/api/products/
+on Headers add Key=Authorization Value=Token <User token>
+on Body raw JSON for post
+{
+  "name": "iPhone 15 kapil 11",
+  "description": "Latest model",
+  "price": "90000.00",
+  "category": {
+    "name": "Mobiles",
+    "slug": "mobiles"
+  }
+}

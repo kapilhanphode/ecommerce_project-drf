@@ -29,14 +29,10 @@ class Product(models.Model):
     seller = models.ForeignKey(User, null=True, on_delete=models.CASCADE, related_name='products')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    is_featured = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name
-
-    def save(self, *args, **kwargs):
-        if self.price <= 10:
-            raise ValueError("Price must be greater than 10")
-        return super().save(**args, **kwargs)
 
 class ProductImage(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='images')

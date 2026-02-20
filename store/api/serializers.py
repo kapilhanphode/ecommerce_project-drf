@@ -1,64 +1,46 @@
 from rest_framework import serializers
-from store.models import Product, Category
+from store.models import Product, Category, ProductImage
+
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
-        fields = ['id', 'name']
+        fields = ('id', 'name', 'slug')
 
 class ProductSerializer(serializers.ModelSerializer):
-    seller = serializers.ReadOnlyField(source='seller.username')
     category = CategorySerializer()
 
     class Meta:
         model = Product
-        fields = ['id', 'name', 'seller', 'description', 'price', 'category']
-
-    def validate_price(self, value):
-        print('validate_price....................')
-        if value <= 10:
-            raise serializers.ValidationError("Price must be greater than 10.")
-        return value
-
-    def validate_name(self, value):
-        if len(value) < 5:
-            raise serializers.ValidationError("Name must be at least 5 characters long.")
-        return value
+        fields = ["id", "name", "description", "price", "category"]
 
     def create(self, validated_data):
-        category_data = validated_data.pop('category')
+        category = validated_data.pop('category')
+        # images = validated_data.pop('images')
 
         category, created = Category.objects.get_or_create(
-            name=category_data['name']
+            slug=category.get('slug'),
+            defaults={'name': category.get('name')}
         )
+
         product = Product.objects.create(
             category=category,
             **validated_data
         )
         return product
 
+
     def update(self, instance, validated_data):
-        category_data = validated_data.pop('category', None)
-        if category_data:
+        category = validated_data.pop('category')
+
+        instance.name = validated_data.get('name', instance.name)
+        instance.price = validated_data.get('price', instance.price)
+        instance.description = validated_data.get('description', instance.description)
+        if category:
             category, created = Category.objects.get_or_create(
-                name=category_data['name']
+                slug=category.get('slug'),
+                defaults={'name': category.get('name')}
             )
             instance.category = category
-        return super().update(instance, validated_data)
-
-    # def validate(self, data):
-    #     price = data.get('price', self.instance.price if self.instance else None)
-    #     category = data.get('category', self.instance.category if self.instance else None)
-    #
-    #     if price and category:
-    #         if price > 100000 and category.name == "Mobile":
-    #             raise serializers.ValidationError(
-    #                 "Mobile category products cannot exceed 100000."
-    #             )
-    #
-    #     return data
-
-    # def create(self, validated_data):
-    #     user = self.context['request'].user
-    #     validated_data['seller'] = user
-    #     return super().create(validated_data)
+        instance.save()
+        return instance
