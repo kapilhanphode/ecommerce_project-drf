@@ -11,5 +11,10 @@ on Body raw JSON for post
   "category": {
     "name": "Mobiles",
     "slug": "mobiles"
-  }
+  },
+  "images": [
+    { "color": "Red" },
+    { "color": "Orange" }
+    ]
 }
+
