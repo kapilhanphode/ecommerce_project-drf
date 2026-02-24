@@ -1,10 +1,18 @@
+from django.core.paginator import Paginator
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView, ListCreateAPIView, RetrieveUpdateDestroyAPIView, CreateAPIView
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 from store.models import Product
 from .serializers import ProductSerializer
+from .pagination import CustomPageNumberPagination, ProductCursorPagination
+from .filters import CustomProductFilter
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly, IsAdminUser, BasePermission, SAFE_METHODS
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter, OrderingFilter
+from rest_framework.pagination import LimitOffsetPagination
+
 
 class IsSellerOrAdmin(BasePermission):
     def has_permission(self, request, view):
@@ -23,6 +31,13 @@ class ProductViewSet(ModelViewSet):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
     permission_classes = [IsSellerOrAdmin]
+    pagination_class = ProductCursorPagination
+    filterset_fields = ['category', 'price']
+    # filterset_class = CustomProductFilter
+    filter_backends = [DjangoFilterBackend,SearchFilter, OrderingFilter]
+    search_fields = ['name', 'description']
+    ordering_fields = ['name', 'price']
+    permission_classes = [IsAdminUser]
 
     def perform_create(self, serializer):
         print('perform_create.............................')

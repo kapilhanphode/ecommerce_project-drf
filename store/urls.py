@@ -2,6 +2,8 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import path
 from . import views
+from rest_framework_simplejwt.views import (TokenObtainPairView, TokenRefreshView)
+
 
 urlpatterns = [
     path('', views.home, name='home'),
@@ -17,6 +19,8 @@ urlpatterns = [
     path('add-to-cart/<int:product_id>/', views.add_to_cart, name='add_to_cart'),
     path('cart/update-quantity/<int:product_id>/<str:action>/', views.update_cart_quantity, name='update_cart_quantity'),
     path('remove-from-cart/<int:product_id>/', views.remove_from_cart, name='remove_from_cart'),
+    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]
 
 if settings.DEBUG:
