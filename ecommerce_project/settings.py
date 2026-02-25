@@ -40,7 +40,7 @@ INSTALLED_APPS = [
     'store',
     'rest_framework',
     'rest_framework.authtoken',
-
+    'django_filters'
 ]
 
 MIDDLEWARE = [
@@ -129,11 +129,21 @@ LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
 
 REST_FRAMEWORK = {
+    # 'DEFAULT_THROTTLE_CLASSES': [
+    #     'rest_framework.throttling.AnonRateThrottle',
+    #     'rest_framework.throttling.UserRateThrottle',
+    # ],
+    'DEFAULT_THROTTLE_RATES': {
+        'orders_anon': '3/minute',
+        'orders_user': '10/minute',
+    },
+
     'DEFAULT_AUTHENTICATION_CLASSES': [
         # 'rest_framework.authentication.SessionAuthentication',
-        # 'rest_framework.authentication.TokenAuthentication',
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.TokenAuthentication',
+        # 'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
+
     # 'DEFAULT_FILTER_BACKENDS': [
     #     'django_filters.rest_framework.DjangoFilterBackend',
     #     # 'rest_framework.filters.SearchFilter'
@@ -142,4 +152,10 @@ REST_FRAMEWORK = {
     # 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     # 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.CursorPagination',
     # 'PAGE_SIZE': 2,
+}
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',  # default cache backend
+    }
 }
