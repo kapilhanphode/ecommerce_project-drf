@@ -15,6 +15,16 @@ from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnl
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.pagination import LimitOffsetPagination
+from django.views.decorators.cache import cache_page, never_cache
+from django.utils.decorators import method_decorator
+import time
+
+@method_decorator(cache_page(30), name='dispatch')  # cache for 30 seconds
+class TimeAPIView(APIView):
+    def get(self, request):
+        return Response({
+            "time": time.time()
+        })
 
 class OrdersAnonThrottle(SimpleRateThrottle):
     scope = 'orders_anon'
@@ -41,6 +51,8 @@ class StaffOrderViewSet(ModelViewSet):
     # throttle_classes = [ScopedRateThrottle]
     throttle_classes = [OrdersAnonThrottle, OrderUserThrottle]
     throttle_scope = 'orders'
+    # pagination_class = PageNumberPagination
+
 
 
     def get_throttles(self):
@@ -83,7 +95,7 @@ class ProductViewSet(ModelViewSet):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
     # permission_classes = [IsSellerOrAdmin]
-    pagination_class = ProductCursorPagination
+    pagination_class = LimitOffsetPagination
     filterset_fields = ['category', 'price']
     # filterset_class = CustomProductFilter
     filter_backends = [DjangoFilterBackend,SearchFilter, OrderingFilter]
