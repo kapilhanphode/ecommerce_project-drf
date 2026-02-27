@@ -36,7 +36,7 @@ class Product(models.Model):
     def save(self, *args, **kwargs):
         if self.price <= 10:
             raise ValueError("Price must be greater than 10")
-        return super().save(**args, **kwargs)
+        return super().save(*args, **kwargs)
 
 class ProductImage(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='images')

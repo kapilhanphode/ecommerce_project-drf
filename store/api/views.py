@@ -16,9 +16,98 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.pagination import LimitOffsetPagination
 from django.views.decorators.cache import cache_page, never_cache
+from django.core.cache import cache
 from django.utils.decorators import method_decorator
 import time
+from django.shortcuts import get_object_or_404
 
+# Due to caching (timeout=30), updated product data will not be
+# visible until the cache expires and new data is fetched from the database.
+# class ProductListAPIView(APIView):
+#     def get(self, request):
+#         cache_key = "product_list"
+#         data = cache.get(cache_key)
+#         if not data:
+#             products = Product.objects.all()
+#             serializer = ProductSerializer(products, many=True)
+#             data = serializer.data
+#             cache.set(cache_key, data, timeout=30)
+#         return Response(data)
+
+# Version-based caching
+class ProductListAPIView(APIView):
+    def get(self, request):
+        category_id = request.GET.get("category")
+
+        if not category_id:
+            return Response({"error": "category query param required"})
+
+        # 🔹 Get category version
+        version_key = f"category_{category_id}_version"
+        version = cache.get(version_key)
+
+        if not version:
+            cache.set(version_key, 1)
+            version = 1
+
+        # 🔹 Build versioned cache key
+        cache_key = f"product_list_category_{category_id}_v{version}"
+
+        data = cache.get(cache_key)
+
+        if not data:
+            products = Product.objects.filter(category_id=category_id)
+            serializer = ProductSerializer(products, many=True)
+            data = serializer.data
+            cache.set(cache_key, data, timeout=60)
+
+        return Response({
+            "version": version,
+            "cache_key": cache_key,
+            "data": data
+        })
+
+
+#update the price immediately but description after 30 sec
+class ProductDetailAPIView(APIView):
+    def get(self, request, pk):
+        static_key = f"product_static_{pk}"
+        print('static_key.......................', static_key)
+        static_data = cache.get(static_key)
+        print('static_data.........................',static_data)
+
+        # 🔹 If static data not cached
+        if not static_data:
+            product = get_object_or_404(Product, pk=pk)
+
+            static_data = {
+                "name": product.name,
+                "description": product.description,
+            }
+
+            cache.set(static_key, static_data, 30)
+
+            # We already have product → reuse it
+            price = product.price
+
+        else:
+            # 🔹 Only fetch dynamic fields
+            dynamic_data = (
+                Product.objects
+                .filter(pk=pk)
+                .values("price")
+                .first()
+            )
+
+            if not dynamic_data:
+                return Response({"error": "Product not found"}, status=404)
+
+            price = dynamic_data["price"]
+
+        return Response({
+            **static_data,
+            "price": price,
+        })
 @method_decorator(cache_page(30), name='dispatch')  # cache for 30 seconds
 class TimeAPIView(APIView):
     def get(self, request):
@@ -117,10 +206,10 @@ class ProductListCreateAPIView(ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
 
-class ProductDetailAPIView(RetrieveUpdateDestroyAPIView):
-    queryset = Product.objects.all()
-    serializer_class = ProductSerializer
-    permission_classes = [IsAuthenticated]
+# class ProductDetailAPIView(RetrieveUpdateDestroyAPIView):
+#     queryset = Product.objects.all()
+#     serializer_class = ProductSerializer
+#     permission_classes = [IsAuthenticated]
 
 
 class IsAdminOrReadOnly(BasePermission):
