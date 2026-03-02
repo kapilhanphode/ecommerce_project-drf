@@ -1,4 +1,8 @@
 from django.core.paginator import Paginator
+from django.db import transaction
+from django.db.models import Count, Sum, F, Avg
+from rest_framework import status
+from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.throttling import ScopedRateThrottle, SimpleRateThrottle
 from rest_framework.views import APIView
@@ -142,6 +146,33 @@ class StaffOrderViewSet(ModelViewSet):
     throttle_scope = 'orders'
     # pagination_class = PageNumberPagination
 
+    def get_queryset(self):
+        # annotate()
+        return Order.objects.annotate(total_item=Count('items'),total_amount=Sum(F("items__price") * F('items__quantity')))
+
+    def list(self, request, *args, **kwargs):
+        # aggregate()
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        summary = Order.objects.aggregate(total_orders=Count('id'), total_items=Sum('items__quantity'),
+                                       total_revenue=Sum(F('items__price') * F('items__quantity')))
+        return Response({
+            "orders": serializer.data,
+            "summary": summary
+        })
+
+    @action(detail=True, methods=['post'])
+    @transaction.atomic
+    def pay(self, request, pk=None):
+        updated = Order.objects.filter(
+            id=pk,
+            status="pending"
+        ).update(status="success")
+
+        if updated == 0:
+            return Response({"message": "Already Processed"})
+
+        return Response({"message": "Payment Successful"})
 
 
     def get_throttles(self):

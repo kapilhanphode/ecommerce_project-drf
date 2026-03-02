@@ -2,6 +2,9 @@ from rest_framework import serializers
 from store.models import Product, Category, Order
 
 class OrderSerializer(serializers.ModelSerializer):
+    total_item = serializers.IntegerField(read_only=True)
+    # total_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+
     class Meta:
         model = Order
         fields = '__all__'
