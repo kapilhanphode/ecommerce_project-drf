@@ -1,19 +1,40 @@
 from rest_framework import serializers
-from store.models import Product, Category, Order
+from store.models import Product, Category, Order, OrderItem
+
+
+class OrderItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrderItem
+        fields = '__all__'
+
 
 class OrderSerializer(serializers.ModelSerializer):
-    total_item = serializers.IntegerField(read_only=True)
+    # annotate
+    # total_item = serializers.IntegerField(read_only=True)
+    # Case / When
     # total_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    # status_label = serializers.CharField(read_only=True)
+    # discount_percentage = serializers.IntegerField(read_only=True)
+    # discount_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    # payable_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    # prefetch
+    bulk_items = OrderItemSerializer(many=True, read_only=True)
+    total_bulk_qty = serializers.IntegerField(read_only=True)
+    # subquery & outerref
+    # latest_item_price = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    # total_quantity = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Order
         fields = '__all__'
         read_only_fields = ('user',)
 
+
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = ['id', 'name']
+
 
 class ProductSerializer(serializers.ModelSerializer):
     seller = serializers.ReadOnlyField(source='seller.username')

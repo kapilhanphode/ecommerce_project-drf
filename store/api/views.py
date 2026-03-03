@@ -1,7 +1,9 @@
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, Sum, F, Avg
+from django.db.models import Count, Sum, F, Avg, Case, When, Value, CharField, IntegerField, ExpressionWrapper, \
+    DecimalField, Prefetch, Subquery, OuterRef, Q
 from rest_framework import status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.throttling import ScopedRateThrottle, SimpleRateThrottle
@@ -9,7 +11,8 @@ from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView, ListCreateAPIView, RetrieveUpdateDestroyAPIView, CreateAPIView
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
-from store.models import Product, Order
+
+from store.models import Product, Order, OrderItem
 from .permission import IsStaffUser, IsOwner, IsOwnerOrAdmin, CanEditDraftOrder
 from .serializers import ProductSerializer, OrderSerializer
 from .pagination import CustomPageNumberPagination, ProductCursorPagination
@@ -24,6 +27,7 @@ from django.core.cache import cache
 from django.utils.decorators import method_decorator
 import time
 from django.shortcuts import get_object_or_404
+
 
 # Due to caching (timeout=30), updated product data will not be
 # visible until the cache expires and new data is fetched from the database.
@@ -72,13 +76,11 @@ class ProductListAPIView(APIView):
         })
 
 
-#update the price immediately but description after 30 sec
+# update the price immediately but description after 30 sec
 class ProductDetailAPIView(APIView):
     def get(self, request, pk):
         static_key = f"product_static_{pk}"
-        print('static_key.......................', static_key)
         static_data = cache.get(static_key)
-        print('static_data.........................',static_data)
 
         # 🔹 If static data not cached
         if not static_data:
@@ -112,6 +114,8 @@ class ProductDetailAPIView(APIView):
             **static_data,
             "price": price,
         })
+
+
 @method_decorator(cache_page(30), name='dispatch')  # cache for 30 seconds
 class TimeAPIView(APIView):
     def get(self, request):
@@ -119,47 +123,150 @@ class TimeAPIView(APIView):
             "time": time.time()
         })
 
+
 class OrdersAnonThrottle(SimpleRateThrottle):
     scope = 'orders_anon'
-    print('Order anon throttle.............................')
+
     def get_cache_key(self, request, view):
         if request.user.is_authenticated:
             return None
         return self.get_ident(request)
 
+
 class OrderUserThrottle(SimpleRateThrottle):
     scope = 'orders_user'
-    print('Order User throttle...........................')
+
     def get_cache_key(self, request, view):
         if request.user.is_authenticated and not request.user.is_staff:
             return str(request.user.id)
         return None
+
+
 class StaffOrderViewSet(ModelViewSet):
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
     # permission_classes = [IsStaffUser] #Allow access only if user belongs to a specific role (e.g., is_staff).
     # permission_classes = [IsAuthenticated, IsOwner] #User can only access objects that belong to them.
-    permission_classes = [IsOwnerOrAdmin] #Owner can access their object. Admin can access all.
+    permission_classes = [IsOwnerOrAdmin]  # Owner can access their object. Admin can access all.
     # permission_classes = [CanEditDraftOrder] #Owner can access their object. Admin can access all.
     # throttle_classes = [ScopedRateThrottle]
     throttle_classes = [OrdersAnonThrottle, OrderUserThrottle]
     throttle_scope = 'orders'
     # pagination_class = PageNumberPagination
 
-    def get_queryset(self):
-        # annotate()
-        return Order.objects.annotate(total_item=Count('items'),total_amount=Sum(F("items__price") * F('items__quantity')))
+    # Case / When
+    # def get_queryset(self):
+    #     # return Order.objects.annotate(status_label=Case(When(status='success', then=Value('Paid')),
+    #     #                                                 When(status='pending', then=Value('Awaiting Payment')),
+    #     #                                                 default=Value('Other'),
+    #     #                                                 output_field=CharField()))
+    #     discount_per = Order.objects.annotate(total_amount=Sum(F('items__price') * F('items__quantity'))
+    #                                           ).annotate(
+    #         discount_percentage=Case(When(total_amount__gt=35000, then=Value(10)),
+    #                                  When(total_amount__gt=20000, then=Value(5)),
+    #                                  default=Value(2),
+    #                                  output_field=IntegerField()))
+    #
+    #     discount_amt = Order.objects.annotate(total_amount=Sum(F('items__price') * F('items__quantity'))
+    #                                           ).annotate(
+    #         discount_percentage=Case(When(total_amount__gt=35000, then=Value(10)),
+    #                                  When(total_amount__gt=20000, then=Value(5)),
+    #                                  default=Value(2),
+    #                                  output_field=IntegerField())).annotate(
+    #         discount_amount=ExpressionWrapper(F('total_amount') * F('discount_percentage') / 100,
+    #                                           output_field=DecimalField(max_digits=12, decimal_places=2))
+    #     )
+    #     payable_amt = Order.objects.annotate(total_amount=Sum(F('items__price') * F('items__quantity'))
+    #                                          ).annotate(
+    #         discount_percentage=Case(When(total_amount__gt=35000, then=Value(10)),
+    #                                  When(total_amount__gt=20000, then=Value(5)),
+    #                                  default=Value(2),
+    #                                  output_field=IntegerField())).annotate(
+    #         discount_amount=ExpressionWrapper(F('total_amount') * F('discount_percentage') / 100,
+    #                                           output_field=DecimalField(max_digits=12, decimal_places=2))).annotate(
+    #         payable_amount=ExpressionWrapper(F('total_amount') - F('discount_amount'),
+    #                                          output_field=DecimalField(max_digits=12, decimal_places=2)),
+    #     )
+    #     return payable_amt
 
-    def list(self, request, *args, **kwargs):
-        # aggregate()
-        queryset = self.get_queryset()
-        serializer = self.get_serializer(queryset, many=True)
-        summary = Order.objects.aggregate(total_orders=Count('id'), total_items=Sum('items__quantity'),
-                                       total_revenue=Sum(F('items__price') * F('items__quantity')))
-        return Response({
-            "orders": serializer.data,
-            "summary": summary
-        })
+    # prefetch
+    # Return Orders
+    # But prefetch ONLY bulk items (qty >= 5)
+    # And annotate each order with total bulk quantity
+    # def get_queryset(self):
+    # #     # return Order.objects.select_related('user').prefetch_related(Prefetch('items',queryset=OrderItem.objects.filter(quantity__gt=1), to_attr='bulk_items'))
+    #     bulk_items_qs = OrderItem.objects.filter(quantity__gte=5)
+    # #     # Annotate total quantity items
+    # #     # return (
+    # #     #     Order.objects
+    # #     #     .filter(status='success')
+    # #     #     .annotate(total_bulk_qty=Sum('items__quantity'))
+    # #     #     .prefetch_related(
+    # #     #         Prefetch('items', queryset=bulk_items_qs, to_attr='bulk_items')
+    # #     #     )
+    # #     # )
+    # #     # Annotate total bulk quantity only (not all items)
+    #     return (
+    #         Order.objects
+    #         .filter(status='success')
+    #         .annotate(
+    #             total_bulk_qty=Sum(
+    #                 'items__quantity',
+    #                 filter=Q(items__quantity__gte=5)
+    #             )
+    #         )
+    #         .prefetch_related(
+    #             Prefetch(
+    #                 'items',
+    #                 queryset=bulk_items_qs,
+    #                 to_attr='bulk_items'
+    #             )
+    #         )
+    #     )
+
+    # only & defer
+    # def get_queryset(self):
+    #     return Order.objects.select_related('user').only('id', 'user')
+
+    # Subquery & OuterRef
+    # def get_queryset(self):
+    #     # Subquery 1: Latest item price per order
+    #     latest_price_subquery = OrderItem.objects.filter(
+    #         order=OuterRef('pk')
+    #     ).order_by('-id').values('price')[:1]
+    #
+    #     # Subquery 2: Total quantity per order
+    #     total_qty_subquery = OrderItem.objects.filter(
+    #         order=OuterRef('pk')
+    #     ).values('order').annotate(
+    #         total_qty=Sum('quantity')
+    #     ).values('total_qty')
+    #
+    #     return Order.objects.annotate(
+    #         latest_item_price=Subquery(latest_price_subquery),
+    #         total_quantity=Subquery(total_qty_subquery)
+    #     )
+
+    # def get_queryset(self):
+    # annotate()
+    # return Order.objects.annotate(total_item=Count('items'),total_amount=Sum(F("items__price") * F('items__quantity')))
+    # annotate + filter
+    # return Order.objects.annotate(total_items=Count('items')).filter(total_items__gt=2)
+    # Conditional Count Using filter = inside Count
+    # return Order.objects.filter(status='success').annotate(total_items=Count('items'))
+    # Conditional Sum()
+    # return Order.objects.filter(status='pending').annotate(total_amount=Sum('items__price'))
+
+    # def list(self, request, *args, **kwargs):
+    #     # aggregate()
+    #     queryset = self.get_queryset()
+    #     serializer = self.get_serializer(queryset, many=True)
+    #     summary = Order.objects.aggregate(total_orders=Count('id'), total_items=Sum('items__quantity'),
+    #                                    total_revenue=Sum(F('items__price') * F('items__quantity')))
+    #     return Response({
+    #         "orders": serializer.data,
+    #         "summary": summary
+    #     })
 
     @action(detail=True, methods=['post'])
     @transaction.atomic
@@ -174,18 +281,31 @@ class StaffOrderViewSet(ModelViewSet):
 
         return Response({"message": "Payment Successful"})
 
-
     def get_throttles(self):
         throttles = super().get_throttles()
-        for t in throttles:
-            print(f'Throttle>>>>>>>>>>>>>>>>>: {t.__class__.__name__} limit={getattr(t, "rate", None)}')
+        # for t in throttles:
+        #     print(f'Throttle>>>>>>>>>>>>>>>>>: {t.__class__.__name__} limit={getattr(t, "rate", None)}')
         return throttles
 
-    #Dynamic Permission Per Action
+    # Dynamic Permission Per Action
     def get_permissions(self):
         if self.action == 'destroy':
-            return [IsAdminUser()]
+            return [IsAuthenticated()]
         return [AllowAny()]
+
+    def destroy(self, request, *args, **kwargs):
+        order = self.get_object()
+
+        if order.status in ["success", "pending", "shipped", "delivered"]:
+            raise PermissionDenied(
+                "Only cancelled or other state orders can be deleted."
+            )
+        if request.user != order.user and not request.user.is_staff:
+            raise PermissionDenied(
+                "You do not have permission to delete this order."
+            )
+
+        return super().destroy(request, *args, **kwargs)
 
     # to get the only user records in the list view.
     # def get_queryset(self):
@@ -195,8 +315,8 @@ class StaffOrderViewSet(ModelViewSet):
     #     return Order.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        print('perform create.......................')
         serializer.save(user=self.request.user)
+
 
 class IsSellerOrAdmin(BasePermission):
     def has_permission(self, request, view):
@@ -211,6 +331,7 @@ class IsSellerOrAdmin(BasePermission):
             return True
         return obj.seller == request.user
 
+
 class ProductViewSet(ModelViewSet):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
@@ -218,14 +339,14 @@ class ProductViewSet(ModelViewSet):
     pagination_class = LimitOffsetPagination
     filterset_fields = ['category', 'price']
     # filterset_class = CustomProductFilter
-    filter_backends = [DjangoFilterBackend,SearchFilter, OrderingFilter]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     search_fields = ['name', 'description']
     ordering_fields = ['name', 'price']
+
     # permission_classes = [IsAdminUser]
 
     def perform_create(self, serializer):
-        print('perform_create.............................')
-        price  = serializer.validated_data.get('price')
+        price = serializer.validated_data.get('price')
         if price <= 10:
             raise ValueError("Price must be greater than 10.")
         serializer.save(price=price)
@@ -248,4 +369,3 @@ class IsAdminOrReadOnly(BasePermission):
         if request.method in SAFE_METHODS:
             return True
         return request.user.is_staff
-
