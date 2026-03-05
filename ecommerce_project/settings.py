@@ -133,6 +133,7 @@ REST_FRAMEWORK = {
     #     'rest_framework.throttling.AnonRateThrottle',
     #     'rest_framework.throttling.UserRateThrottle',
     # ],
+    # "EXCEPTION_HANDLER": "store.api.exceptions.custom_exception_handler",
     'DEFAULT_THROTTLE_RATES': {
         'orders_anon': '3/minute',
         'orders_user': '10/minute',

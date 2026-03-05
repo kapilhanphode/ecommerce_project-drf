@@ -3,7 +3,7 @@ from django.db import transaction
 from django.db.models import Count, Sum, F, Avg, Case, When, Value, CharField, IntegerField, ExpressionWrapper, \
     DecimalField, Prefetch, Subquery, OuterRef, Q
 from rest_framework import status
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.throttling import ScopedRateThrottle, SimpleRateThrottle
@@ -11,7 +11,7 @@ from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView, ListCreateAPIView, RetrieveUpdateDestroyAPIView, CreateAPIView
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
-
+from store.services.order_service import OrderService
 from store.models import Product, Order, OrderItem
 from .permission import IsStaffUser, IsOwner, IsOwnerOrAdmin, CanEditDraftOrder
 from .serializers import ProductSerializer, OrderSerializer
@@ -314,8 +314,14 @@ class StaffOrderViewSet(ModelViewSet):
     #         return Order.objects.all()
     #     return Order.objects.filter(user=self.request.user)
 
+
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        items = self.request.data.get("items")
+        order = OrderService.create_order(
+            user=self.request.user,
+            items=items
+        )
+        serializer.instance = order
 
 
 class IsSellerOrAdmin(BasePermission):
@@ -348,8 +354,10 @@ class ProductViewSet(ModelViewSet):
     def perform_create(self, serializer):
         price = serializer.validated_data.get('price')
         if price <= 10:
-            raise ValueError("Price must be greater than 10.")
-        serializer.save(price=price)
+            raise ValidationError({
+                "price": "Price must be greater than 10."
+            })
+        serializer.save()
 
 
 class ProductListCreateAPIView(ListCreateAPIView):

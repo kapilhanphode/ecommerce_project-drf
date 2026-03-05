@@ -8,4 +8,5 @@ class StoreConfig(AppConfig):
     name = 'store'
 
     def ready(self):
+        print('ready.............................')
         import store.api.signals
