@@ -23,3 +23,12 @@ def custom_exception_handler(exc, context):
         "message": "Internal server error",
         "status_code": status.HTTP_500_INTERNAL_SERVER_ERROR
     }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+def success_response(data=None, message="Operation successful", status_code=status.HTTP_200_OK):
+    return Response({
+        "status": "success",
+        "message": message,
+        "data": data,
+        "status_code": status_code
+    }, status=status_code)
+

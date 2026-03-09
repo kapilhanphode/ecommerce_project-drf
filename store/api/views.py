@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 from store.services.order_service import OrderService
 from store.models import Product, Order, OrderItem
+from .exceptions import PriceTooLowException, success_response
 from .permission import IsStaffUser, IsOwner, IsOwnerOrAdmin, CanEditDraftOrder
 from .serializers import ProductSerializer, OrderSerializer
 from .pagination import CustomPageNumberPagination, ProductCursorPagination
@@ -27,6 +28,7 @@ from django.core.cache import cache
 from django.utils.decorators import method_decorator
 import time
 from django.shortcuts import get_object_or_404
+from store.api.tasks import send_order_email
 
 
 # Due to caching (timeout=30), updated product data will not be
@@ -317,6 +319,7 @@ class StaffOrderViewSet(ModelViewSet):
 
     def perform_create(self, serializer):
         items = self.request.data.get("items")
+        print('items......................',items)
         order = OrderService.create_order(
             user=self.request.user,
             items=items
@@ -348,17 +351,36 @@ class ProductViewSet(ModelViewSet):
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     search_fields = ['name', 'description']
     ordering_fields = ['name', 'price']
-
     # permission_classes = [IsAdminUser]
+
+    def list(self, request, *args, **kwargs):
+        products = self.get_queryset()
+
+        serializer = self.get_serializer(products, many=True)
+
+        if request.version == "v1":
+            return Response({
+                "version": "v1",
+                "data": serializer.data
+            })
+
+        if request.version == "v2":
+            return Response({
+                "version": "v2",
+                "total_products": products.count(),
+                "data": serializer.data
+            })
 
     def perform_create(self, serializer):
         price = serializer.validated_data.get('price')
         if price <= 10:
-            raise ValidationError({
-                "price": "Price must be greater than 10."
-            })
-        serializer.save()
-
+            raise PriceTooLowException
+            # raise ValidationError({
+            #     "price": "Price must be greater than 10."
+            # })
+        product = serializer.save()
+        send_order_email.delay(product.id)
+        serializer.instance = product
 
 class ProductListCreateAPIView(ListCreateAPIView):
     queryset = Product.objects.all()

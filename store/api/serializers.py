@@ -44,10 +44,10 @@ class ProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = ['id', 'name', 'seller', 'description', 'price', 'category']
 
-    def validate_price(self, value):
-        if value <= 10:
-            raise serializers.ValidationError("Price must be greater than 10.")
-        return value
+    # def validate_price(self, value):
+    #     if value <= 10:
+    #         raise serializers.ValidationError("Price must be greater than 10.")
+    #     return value
 
     def validate_name(self, value):
         if len(value) < 5:

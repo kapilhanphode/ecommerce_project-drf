@@ -133,7 +133,8 @@ REST_FRAMEWORK = {
     #     'rest_framework.throttling.AnonRateThrottle',
     #     'rest_framework.throttling.UserRateThrottle',
     # ],
-    # "EXCEPTION_HANDLER": "store.api.exceptions.custom_exception_handler",
+    "DEFAULT_VERSIONING_CLASS": "rest_framework.versioning.URLPathVersioning",
+    "EXCEPTION_HANDLER": "store.api.exceptions.custom_exception_handler",
     'DEFAULT_THROTTLE_RATES': {
         'orders_anon': '3/minute',
         'orders_user': '10/minute',
@@ -160,3 +161,9 @@ CACHES = {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',  # default cache backend
     }
 }
+
+CELERY_BROKER_URL = 'redis://localhost:6379/0'  # or RabbitMQ URL
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+
+# Optional: in dev, execute tasks synchronously for testing
+CELERY_TASK_ALWAYS_EAGER = False
